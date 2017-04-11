@@ -1,14 +1,20 @@
 <?php
-require("settings.php");
+/**
+ * Created by PhpStorm.
+ * User: Lennart
+ * Date: 11-04-17
+ * Time: 12:00
+ */
 
-if ($dbname == "0893738") {
-    $base = "https://stud.hosted.hr.nl/0893738/api/annotations/";
-} else {
-    $base = "https://localhost/api/annotations/";
-}
+require("settings.php");
 
 $method = $_SERVER['REQUEST_METHOD'];
 $format = $_SERVER['HTTP_ACCEPT'];
+
+$table = "annotations";
+$fields = ['title', 'description', 'color', 'coordinate_x', 'coordinate_y'];
+
+header('Access-Control-Allow-Origin: http://localhost:63342');
 
 if (isset($_GET['id'])) {
     $id = $_GET['id'];
@@ -25,7 +31,7 @@ if (isset($_GET['limit'])) {
 
 switch ($method) {
     case 'GET':
-        $query = "SELECT * FROM annotations";
+        $query = "SELECT * FROM $table";
         $result = mysqli_query($connection, $query) or die(mysqli_error($connection));
         if (!empty($limit)) {
             $page_total = ceil($result->num_rows / $limit);
@@ -68,7 +74,7 @@ switch ($method) {
             $url_next = "";
         }
 
-        $query = "SELECT * FROM annotations ";
+        $query = "SELECT * FROM $table ";
 
         if (!empty($id)) {
             $query .= " WHERE id = " . $id;
@@ -118,7 +124,7 @@ switch ($method) {
         }
         // ARRAY GEMAAKT
 
-        if ($format == 'application/json' || $format == 'json' || $format == 'JSON' || $format == "/json" || $format == "/JSON") {
+        if ($format == 'application/json' || $format == 'json' || $format == 'JSON' || $format == "/json" || $format == "/JSON" || $format == " */*" || $format == "application/json, text/javascript, */*; q=0.01") {
             if ($result_items->num_rows == 0) {
                 http_response_code(404);
             } else {
@@ -146,9 +152,9 @@ switch ($method) {
                 }
 
                 if (!empty($id)) {
-                    $end_array_xml = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><annotation></annotation>');
+                    $end_array_xml = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><item></item>');
                 } else {
-                    $end_array_xml = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><annotations></annotations>');
+                    $end_array_xml = new SimpleXMLElement('<?xml version="1.0" encoding="utf-8"?><items></items>');
                 }
                 array_to_xml($end_array, $end_array_xml);
                 echo $end_array_xml->saveXML();
@@ -165,64 +171,88 @@ switch ($method) {
         if (isset($id)) {
             http_response_code(405);
         } else {
-            print_r($_POST);
+            $data = [];
+            $keys = [];
+            $values = [];
             $data_check = false;
-            if (!empty($_POST)) {
-                if ($_POST['title'] == "" or $_POST['description'] == "" or $_POST['color'] == "" or $_POST['coordinate_x'] == "" or $_POST['coordinate_y'] == "") {
-                    http_response_code(400);
-                } else {
-                    $title = $_POST['title'];
-                    $description = $_POST['description'];
-                    $color = $_POST['color'];
-                    $coordinate_x = $_POST['coordinate_x'];
-                    $coordinate_y = $_POST['coordinate_y'];
-                    $data_check = true;
-                }
-            } else if (!empty(file_get_contents("php://input"))) {
-                $putData = file_get_contents("php://input");
-                $jsonData = json_decode($putData);
-                if ($jsonData->title == "" or $jsonData->description == "" or $jsonData->color == "" or $jsonData->coordinate_x == "" or $jsonData->coordinate_y == "") {
-                    http_response_code(400);
-                } else {
-                    $title = $jsonData->title;
-                    $description = $jsonData->description;
-                    $color = $jsonData->color;
-                    $coordinate_x = $jsonData->coordinate_x;
-                    $coordinate_y = $jsonData->coordinate_y;
-                    $data_check = true;
-                }
-            } else {
-                http_response_code(400);
-            }
-            if ($data_check == true) {
-                $query = "INSERT INTO `annotations` (`title`, `description`, `color`, `coordinate_x`, `coordinate_y`)
-                  VALUES ('$title', '$description', '$color', '$coordinate_x', '$coordinate_y')";
 
-                $result = mysqli_query($connection, $query) or die(mysqli_error($connection));
-                http_response_code(201);
+            if (!empty($_POST)) {
+                $data = $_POST;
+            } else if (!empty(file_get_contents("php://input"))) {
+                $jsonData = file_get_contents("php://input");
+                $data = (array)json_decode($jsonData);
+            }
+
+            if (!empty($data)) {
+                foreach ($fields as $field) {
+                    if (isset($data[$field])) {
+                        $keys[] = $field;
+                        $values[] = $data[$field];
+                    }
+                }
+            }
+
+            if (!empty($values)) {
+                $data_check = true;
+            } else {
+                http_response_code(411);
+            }
+
+            if ($data_check == true) {
+                $query = "INSERT INTO `$table` (`" . implode("`,`", $keys) . "`)
+                  VALUES ('" . implode("','", $values) . "')";
+
+                if (mysqli_query($connection, $query)) {
+                    $last_id = mysqli_insert_id($connection);
+                    http_response_code(201);
+                    echo '{id: ' . $last_id . ' }';
+                } else {
+                    echo "Error: " . $query . "<br>" . mysqli_error($connection);
+                    http_response_code(400);
+                }
             }
         }
         break;
 
     case 'PUT':
         if (isset($id)) {
-            if (!empty(file_get_contents("php://input"))) {
-                $putData = file_get_contents("php://input");
-                $jsonData = json_decode($putData);
-                
-                if ($jsonData->title != "" or $jsonData->description != "" or $jsonData->color != "" or $jsonData->coordinate_x != "" or $jsonData->coordinate_y != "") {
-                    $title = $jsonData->title;
-                    $description = $jsonData->description;
-                    $color = $jsonData->color;
-                    $coordinate_x = $jsonData->coordinate_x;
-                    $coordinate_y = $jsonData->coordinate_y;
+            $data = [];
+            $values = [];
+            $data_check = false;
 
-                $query = "UPDATE annotations SET title='$title', description='$description', color='$color', coordinate_x='$coordinate_x', coordinate_y='$coordinate_y' WHERE id = " . $id;
-                $result = mysqli_query($connection, $query) or die(mysqli_error($connection));
-                } else {
-                    http_response_code(411);
-                }  
+            if (!empty($_POST)) {
+                $data = $_POST;
+            } else if (!empty(file_get_contents("php://input"))) {
+                $jsonData = file_get_contents("php://input");
+                $data = (array)json_decode($jsonData);
             }
+
+            if (!empty($data)) {
+                foreach ($fields as $field) {
+                    if (isset($data[$field])) {
+                        $values[] = "`$field`='$data[$field]'";;
+                    }
+                }
+            }
+
+            if (!empty($values)) {
+                $data_check = true;
+            } else {
+                http_response_code(411);
+            }
+
+            if ($data_check == true) {
+                $query = "UPDATE `$table` SET " . implode(",", $values) . " WHERE `id` = " .$id;
+
+                if (mysqli_query($connection, $query)) {
+                    $last_id = mysqli_insert_id($connection);
+                    http_response_code(204);
+                } else {
+                    echo "Error: " . $query . "<br>" . mysqli_error($connection);
+                    http_response_code(400);
+                }
+            }
+
         } else {
             http_response_code(405);
         }
@@ -230,7 +260,7 @@ switch ($method) {
 
     case 'DELETE':
         if (isset($id)) {
-            $query = "DELETE FROM annotations WHERE id =$id";
+            $query = "DELETE FROM $table WHERE id =$id";
             $result = mysqli_query($connection, $query) or die(mysqli_error($connection));
             http_response_code(204);
 
@@ -243,8 +273,12 @@ switch ($method) {
     case 'OPTIONS':
         if (isset($id)) {
             header('Allow: GET,PUT,DELETE,OPTIONS');
+            header('Access-Control-Allow-Methods: GET,PUT,DELETE,OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type');
         } else {
             header('Allow: GET,POST,OPTIONS');
+            header('Access-Control-Allow-Methods: GET,POST,OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type');
         }
         break;
 }
