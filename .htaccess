@@ -1,8 +1,7 @@
 <IfModule mod_rewrite.c>
 	RewriteEngine on
 
-	RewriteRule ^annotations/?$ annotations.php
-	RewriteRule ^annotations/([0-9]+)$ annotations.php?id=$1
-	RewriteRule ^annotations/([0-9]+)/$ annotations.php?id=$1
+	RewriteRule ^annotations/?$ webservice.php
+	RewriteRule ^annotations/([0-9]+)/?$ webservice.php?id=$1
 
 </IfModule>
